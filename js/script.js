@@ -64,29 +64,36 @@ function initThree() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111111);
 
-    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(2, 2, 5);
+    // Zoom out more: 45 FOV and moved back
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(3, 3, 7);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     $("#three-container").appendChild(renderer.domElement);
 
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.minDistance = 1;
-    controls.maxDistance = 10;
+    controls.maxDistance = 15;
 
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
     dirLight.position.set(5, 10, 7.5);
     dirLight.castShadow = true;
+    // Fix shadow acne / triangular patterns
+    dirLight.shadow.bias = -0.001;
+    dirLight.shadow.normalBias = 0.02;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
     scene.add(dirLight);
 
     window.addEventListener('resize', onWindowResize);
@@ -100,6 +107,7 @@ function onWindowResize() {
 }
 
 function showToast(text, delay = 0) {
+    // Increased default delays for better user experience
     setTimeout(() => {
         if (currentToast) {
             currentToast.classList.remove('show');
@@ -109,9 +117,9 @@ function showToast(text, delay = 0) {
         toast.className = 'toast';
         toast.innerText = text;
         $("#toast-container").appendChild(toast);
-        setTimeout(() => toast.classList.add('show'), 10);
+        setTimeout(() => toast.classList.add('show'), 50);
         currentToast = toast;
-    }, delay);
+    }, delay + 1000);
 }
 
 function hideToast() {
@@ -241,12 +249,14 @@ function openBag() {
 
 function bagGone() {
     currentState = States.BAG_GONE;
+    // Move further down and slower before hiding
     new TWEEN.Tween(bagMesh.position)
-        .to({ y: -1.0 }, 1000)
+        .to({ y: -3.0 }, 2000)
+        .easing(TWEEN.Easing.Quadratic.In)
         .onComplete(() => {
             bagMesh.visible = false;
             currentState = States.BOX_CLOSED;
-            showToast("Click the top of the box to open", 2000);
+            showToast("Click the top of the box to open", 3000);
         })
         .start();
 }
@@ -255,18 +265,21 @@ function openBox() {
     currentState = States.BOX_OPENING;
     hideToast();
 
-    // Wave 1: Open_1 to 1.0, Open_2 sin curve
+    // Wave 1: Open_2 on sin curve, Open_1 goes 0 to 1 (per feedback)
     new TWEEN.Tween({ t: 0 })
-        .to({ t: 1 }, 1000)
+        .to({ t: 1 }, 1200)
+        .easing(TWEEN.Easing.Quadratic.InOut)
         .onUpdate(obj => {
             setMorphValue(boxMesh, 'Open_1', obj.t);
             setMorphValue(boxMesh, 'Open_2', Math.sin(obj.t * Math.PI));
         })
         .onComplete(() => {
-            // Wave 2: Open_3 and Flaps_Open to 1.0
+            // Wave 2: Open_1 goes 1.0 to 0.01, Open_3 goes 0.0 to 1.0
             new TWEEN.Tween({ t: 0 })
-                .to({ t: 1 }, 500)
+                .to({ t: 1 }, 800)
+                .easing(TWEEN.Easing.Quadratic.InOut)
                 .onUpdate(obj => {
+                    setMorphValue(boxMesh, 'Open_1', 1.0 - (obj.t * 0.99));
                     setMorphValue(boxMesh, 'Open_3', obj.t);
                     setMorphValue(boxMesh, 'Flaps_Open', obj.t);
                 })
@@ -281,14 +294,9 @@ function openBox() {
 function cartMovingOut() {
     currentState = States.CART_OUT;
     
-    // Copy start pos from empty if needed (usually it is already there)
-    if (cartEmpties.start) {
-        cartGroup.position.copy(cartEmpties.start.position);
-        cartGroup.quaternion.copy(cartEmpties.start.quaternion);
-    }
-
     new TWEEN.Tween(cartGroup.position)
-        .to({ x: cartEmpties.out.position.x, y: cartEmpties.out.position.y, z: cartEmpties.out.position.z }, 1000)
+        .to({ x: cartEmpties.out.position.x, y: cartEmpties.out.position.y, z: cartEmpties.out.position.z }, 1500)
+        .easing(TWEEN.Easing.Quadratic.Out)
         .onComplete(() => {
             boxGone();
         })
@@ -297,8 +305,10 @@ function cartMovingOut() {
 
 function boxGone() {
     currentState = States.BOX_GONE;
+    // Move further down and slower before hiding
     new TWEEN.Tween(boxMesh.position)
-        .to({ y: -1.0 }, 1000)
+        .to({ y: -3.0 }, 2000)
+        .easing(TWEEN.Easing.Quadratic.In)
         .onComplete(() => {
             boxMesh.visible = false;
             gameboyAppearing();
@@ -309,11 +319,13 @@ function boxGone() {
 function gameboyAppearing() {
     currentState = States.GB_APPEARING;
     gbMesh.visible = true;
+    gbMesh.position.y = -3.0; // Appear from further down
     new TWEEN.Tween(gbMesh.position)
-        .to({ y: 0 }, 1000)
+        .to({ y: 0 }, 1500)
+        .easing(TWEEN.Easing.Back.Out)
         .onComplete(() => {
             currentState = States.GB_READY;
-            showToast("Click the cartridge to insert", 2000);
+            showToast("Click the cartridge to insert", 3500);
         })
         .start();
 }
@@ -322,20 +334,25 @@ function insertCart() {
     currentState = States.CART_INSERTING;
     hideToast();
 
-    // Move to Flipped
-    new TWEEN.Tween(cartGroup.position)
-        .to({ x: cartEmpties.flipped.position.x, y: cartEmpties.flipped.position.y, z: cartEmpties.flipped.position.z }, 800)
-        .start();
+    // Fix rotation "shrink" by using proper Slerp instead of tweening quat components directly
+    const startPos = cartGroup.position.clone();
+    const startQuat = cartGroup.quaternion.clone();
     
-    new TWEEN.Tween(cartGroup.quaternion)
-        .to({ x: cartEmpties.flipped.quaternion.x, y: cartEmpties.flipped.quaternion.y, z: cartEmpties.flipped.quaternion.z, w: cartEmpties.flipped.quaternion.w }, 800)
+    new TWEEN.Tween({ t: 0 })
+        .to({ t: 1 }, 1500)
+        .easing(TWEEN.Easing.Quadratic.InOut)
+        .onUpdate(obj => {
+            cartGroup.position.lerpVectors(startPos, cartEmpties.flipped.position, obj.t);
+            cartGroup.quaternion.slerpQuaternions(startQuat, cartEmpties.flipped.quaternion, obj.t);
+        })
         .onComplete(() => {
-            // Slide into Inserted
+            // Slide into GameBoy
             new TWEEN.Tween(cartGroup.position)
-                .to({ x: cartEmpties.inserted.position.x, y: cartEmpties.inserted.position.y, z: cartEmpties.inserted.position.z }, 500)
+                .to({ x: cartEmpties.inserted.position.x, y: cartEmpties.inserted.position.y, z: cartEmpties.inserted.position.z }, 800)
+                .easing(TWEEN.Easing.Quadratic.In)
                 .onComplete(() => {
                     currentState = States.GB_OFF;
-                    showToast("Click the power button on the GameBoy", 2000);
+                    showToast("Click the power button on the GameBoy", 3000);
                 })
                 .start();
         })
@@ -360,6 +377,11 @@ async function startEmulator() {
     $("#emulator-controls").style.display = "block";
     $("#controls-panel").style.width = "220px";
 
+    // Fix screen covering: resize canvas to match GameBoy screen resolution
+    const canvas = $("#mainCanvas");
+    canvas.width = 160;
+    canvas.height = 144;
+
     let response = await fetch(ROM_FILENAME);
     let romBuffer = await response.arrayBuffer();
     const extRamStored = localStorage.getItem("extram");
@@ -371,11 +393,14 @@ async function startEmulator() {
     // Apply texture to screen mesh
     gbMesh.traverse((child) => {
         if (child.isMesh && child.name === "GB_02_low_Screen__0") {
-            const canvas = $("#mainCanvas");
             screenTexture = new THREE.CanvasTexture(canvas);
             screenTexture.flipY = false;
             screenTexture.minFilter = THREE.NearestFilter;
             screenTexture.magFilter = THREE.NearestFilter;
+            // Ensure full coverage and correct wrapping
+            screenTexture.wrapS = THREE.ClampToEdgeWrapping;
+            screenTexture.wrapT = THREE.ClampToEdgeWrapping;
+            
             child.material = new THREE.MeshBasicMaterial({ map: screenTexture });
         }
     });
