@@ -45,6 +45,7 @@ const States = {
 };
 
 let currentState = States.LOADING;
+let isPoweredOn = false;
 
 // --- Three.js Globals ---
 let scene, camera, renderer, controls, raycaster, mouse;
@@ -165,7 +166,7 @@ async function loadAssets() {
             setMorphValue(bagMesh, 'Top_Bent', 1.0);
 
             if (gbMesh) {
-                gbMesh.position.y -= 20.0;
+                gbMesh.position.y -= 25.0;
                 gbMesh.visible = false;
             }
 
@@ -210,9 +211,9 @@ function onDocumentClick(event) {
     } else if (currentState === States.GB_READY) {
         const intersects = raycaster.intersectObject(cartGroup, true);
         if (intersects.length > 0) insertCart();
-    } else if (currentState === States.GB_OFF) {
+    } else if (currentState === States.GB_OFF || currentState === States.PLAYING) {
         const intersects = raycaster.intersectObject(colliders.powerBtn);
-        if (intersects.length > 0) powerOn();
+        if (intersects.length > 0) togglePower();
     }
 }
 
@@ -260,21 +261,23 @@ function openBox() {
     currentState = States.BOX_OPENING;
     hideToast();
 
+    // Wave 1: Open_1 is sine (0-1-0), Open_2 is linear (0-1)
     new TWEEN.Tween({ t: 0 })
         .to({ t: 1 }, 1200)
         .easing(TWEEN.Easing.Quadratic.InOut)
         .onUpdate(obj => {
-            setMorphValue(boxMesh, 'Open_1', obj.t);
-            setMorphValue(boxMesh, 'Open_2', Math.sin(obj.t * Math.PI));
+            setMorphValue(boxMesh, 'Open_1', Math.sin(obj.t * Math.PI));
+            setMorphValue(boxMesh, 'Open_2', obj.t);
         })
         .onComplete(() => {
+            // Wave 2: Open_2 goes 1.0 to 0.0, Flaps_Open goes 0.0 to 1.0
             new TWEEN.Tween({ t: 0 })
                 .to({ t: 1 }, 1000)
                 .easing(TWEEN.Easing.Quadratic.InOut)
                 .onUpdate(obj => {
-                    setMorphValue(boxMesh, 'Open_1', 1.0 - (obj.t * 0.99));
-                    setMorphValue(boxMesh, 'Open_3', obj.t);
+                    setMorphValue(boxMesh, 'Open_2', 1.0 - obj.t);
                     setMorphValue(boxMesh, 'Flaps_Open', obj.t);
+                    setMorphValue(boxMesh, 'Open_3', obj.t);
                 })
                 .onComplete(() => {
                     cartMovingOut();
@@ -313,7 +316,7 @@ function gameboyAppearing() {
     gbMesh.position.y = -25.0;
     new TWEEN.Tween(gbMesh.position)
         .to({ y: 0 }, 2000)
-        .easing(TWEEN.Easing.Back.Out)
+        .easing(TWEEN.Easing.Quadratic.Out)
         .onComplete(() => {
             currentState = States.GB_READY;
             showToast("Click the cartridge to insert", 3500);
@@ -348,18 +351,35 @@ function insertCart() {
         .start();
 }
 
-function powerOn() {
-    currentState = States.GB_POWERING_ON;
-    hideToast();
-
-    new TWEEN.Tween({ t: 0 })
-        .to({ t: 1 }, 500)
-        .onUpdate(obj => setMorphValue(gbMesh, 'On', obj.t))
-        .onComplete(() => {
-            if (ledMesh) ledMesh.visible = true;
-            startEmulator();
-        })
-        .start();
+function togglePower() {
+    if (currentState === States.GB_POWERING_ON) return;
+    
+    isPoweredOn = !isPoweredOn;
+    
+    if (isPoweredOn) {
+        currentState = States.GB_POWERING_ON;
+        hideToast();
+        new TWEEN.Tween({ t: 0 })
+            .to({ t: 1 }, 500)
+            .easing(TWEEN.Easing.Quadratic.InOut)
+            .onUpdate(obj => setMorphValue(gbMesh, 'On', obj.t))
+            .onComplete(() => {
+                if (ledMesh) ledMesh.visible = true;
+                startEmulator();
+            })
+            .start();
+    } else {
+        if (ledMesh) ledMesh.visible = false;
+        new TWEEN.Tween({ t: 1 })
+            .to({ t: 0 }, 500)
+            .easing(TWEEN.Easing.Quadratic.InOut)
+            .onUpdate(obj => setMorphValue(gbMesh, 'On', obj.t))
+            .onComplete(() => {
+                stopEmulator();
+                currentState = States.GB_OFF;
+            })
+            .start();
+    }
 }
 
 async function startEmulator() {
@@ -391,6 +411,21 @@ async function startEmulator() {
     });
 
     currentState = States.PLAYING;
+}
+
+function stopEmulator() {
+    if (emulator) {
+        emulator.destroy();
+        emulator = null;
+    }
+    gbMesh.traverse((child) => {
+        if (child.isMesh && child.name === "GB_02_low_Screen__0") {
+            child.material = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        }
+    });
+    screenTexture = null;
+    $("#emulator-controls").style.display = "none";
+    $("#controls-panel").style.width = "190px";
 }
 
 function animate() {
