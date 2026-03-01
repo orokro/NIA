@@ -49,7 +49,7 @@ let currentState = States.LOADING;
 // --- Three.js Globals ---
 let scene, camera, renderer, controls, raycaster, mouse;
 let sceneModel, bagMesh, boxMesh, gbMesh, cartGroup, ledMesh;
-let colliders = { boxTop: null, powerBtn: null };
+let colliders = { boxTop: null, powerBtn: null, bagTop: null };
 let cartEmpties = { start: null, out: null, flipped: null, inserted: null };
 let screenTexture = null;
 let currentToast = null;
@@ -64,9 +64,8 @@ function initThree() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111111);
 
-    // Zoom out more: 45 FOV and moved back
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(3, 3, 7);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera.position.set(6, 6, 12);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -78,7 +77,7 @@ function initThree() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.minDistance = 1;
-    controls.maxDistance = 15;
+    controls.maxDistance = 50;
 
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
@@ -87,9 +86,8 @@ function initThree() {
     scene.add(ambientLight);
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
-    dirLight.position.set(5, 10, 7.5);
+    dirLight.position.set(5, 15, 10);
     dirLight.castShadow = true;
-    // Fix shadow acne / triangular patterns
     dirLight.shadow.bias = -0.001;
     dirLight.shadow.normalBias = 0.02;
     dirLight.shadow.mapSize.width = 2048;
@@ -107,7 +105,6 @@ function onWindowResize() {
 }
 
 function showToast(text, delay = 0) {
-    // Increased default delays for better user experience
     setTimeout(() => {
         if (currentToast) {
             currentToast.classList.remove('show');
@@ -119,7 +116,7 @@ function showToast(text, delay = 0) {
         $("#toast-container").appendChild(toast);
         setTimeout(() => toast.classList.add('show'), 50);
         currentToast = toast;
-    }, delay + 1000);
+    }, delay + 1500);
 }
 
 function hideToast() {
@@ -140,7 +137,6 @@ async function loadAssets() {
             sceneModel = gltf.scene;
             scene.add(sceneModel);
             
-            // Extract references
             sceneModel.traverse(child => {
                 if (child.name === 'FLBag') bagMesh = child;
                 if (child.name === 'GameBox') boxMesh = child;
@@ -149,29 +145,27 @@ async function loadAssets() {
                 if (child.name === 'LED') ledMesh = child;
                 if (child.name === 'Collider_BoxTop') colliders.boxTop = child;
                 if (child.name === 'Collider_PowerButton') colliders.powerBtn = child;
+                if (child.name === 'Collider_BagTop') colliders.bagTop = child;
                 if (child.name === 'GB_Catridge_Start') cartEmpties.start = child;
                 if (child.name === 'GB_Catridge_Out') cartEmpties.out = child;
                 if (child.name === 'GB_Catridge_Flipped') cartEmpties.flipped = child;
                 if (child.name === 'GB_Catridge_Inserted') cartEmpties.inserted = child;
                 
-                // Set shadows
                 if (child.isMesh) {
                     child.castShadow = true;
                     child.receiveShadow = true;
                 }
             });
 
-            // Initial scene state
             if (ledMesh) ledMesh.visible = false;
             if (colliders.boxTop) colliders.boxTop.visible = false;
             if (colliders.powerBtn) colliders.powerBtn.visible = false;
+            if (colliders.bagTop) colliders.bagTop.visible = false;
 
-            // Bag initial shape key
             setMorphValue(bagMesh, 'Top_Bent', 1.0);
 
-            // Hide GameBoy initially
             if (gbMesh) {
-                gbMesh.position.y -= 1.0;
+                gbMesh.position.y -= 20.0;
                 gbMesh.visible = false;
             }
 
@@ -205,8 +199,11 @@ function onDocumentClick(event) {
     raycaster.setFromCamera(mouse, camera);
 
     if (currentState === States.BAG_CLOSED) {
-        const intersects = raycaster.intersectObject(bagMesh);
-        if (intersects.length > 0) openBag();
+        const intersects = raycaster.intersectObject(colliders.bagTop);
+        if (intersects.length > 0) {
+            if (colliders.bagTop.parent) colliders.bagTop.parent.remove(colliders.bagTop);
+            openBag();
+        }
     } else if (currentState === States.BOX_CLOSED) {
         const intersects = raycaster.intersectObject(colliders.boxTop);
         if (intersects.length > 0) openBox();
@@ -225,19 +222,18 @@ function openBag() {
     currentState = States.BAG_OPENING;
     hideToast();
 
-    // Wave 1: Bent to 0, Opening sin curve
     const wave1 = { t: 0 };
     new TWEEN.Tween(wave1)
-        .to({ t: 1 }, 1000)
+        .to({ t: 1 }, 1200)
+        .easing(TWEEN.Easing.Quadratic.InOut)
         .onUpdate(() => {
             setMorphValue(bagMesh, 'Top_Bent', 1.0 - wave1.t);
-            const sinVal = Math.sin(wave1.t * Math.PI);
-            setMorphValue(bagMesh, 'Top_Opening', sinVal);
+            setMorphValue(bagMesh, 'Top_Opening', Math.sin(wave1.t * Math.PI));
         })
         .onComplete(() => {
-            // Wave 2: Top_Open to 1.0
             new TWEEN.Tween({ v: 0 })
-                .to({ v: 1 }, 500)
+                .to({ v: 1 }, 600)
+                .easing(TWEEN.Easing.Quadratic.Out)
                 .onUpdate(obj => setMorphValue(bagMesh, 'Top_Open', obj.v))
                 .onComplete(() => {
                     bagGone();
@@ -249,14 +245,13 @@ function openBag() {
 
 function bagGone() {
     currentState = States.BAG_GONE;
-    // Move further down and slower before hiding
     new TWEEN.Tween(bagMesh.position)
-        .to({ y: -3.0 }, 2000)
+        .to({ y: -25.0 }, 3000)
         .easing(TWEEN.Easing.Quadratic.In)
         .onComplete(() => {
             bagMesh.visible = false;
             currentState = States.BOX_CLOSED;
-            showToast("Click the top of the box to open", 3000);
+            showToast("Click the top of the box to open", 3500);
         })
         .start();
 }
@@ -265,7 +260,6 @@ function openBox() {
     currentState = States.BOX_OPENING;
     hideToast();
 
-    // Wave 1: Open_2 on sin curve, Open_1 goes 0 to 1 (per feedback)
     new TWEEN.Tween({ t: 0 })
         .to({ t: 1 }, 1200)
         .easing(TWEEN.Easing.Quadratic.InOut)
@@ -274,9 +268,8 @@ function openBox() {
             setMorphValue(boxMesh, 'Open_2', Math.sin(obj.t * Math.PI));
         })
         .onComplete(() => {
-            // Wave 2: Open_1 goes 1.0 to 0.01, Open_3 goes 0.0 to 1.0
             new TWEEN.Tween({ t: 0 })
-                .to({ t: 1 }, 800)
+                .to({ t: 1 }, 1000)
                 .easing(TWEEN.Easing.Quadratic.InOut)
                 .onUpdate(obj => {
                     setMorphValue(boxMesh, 'Open_1', 1.0 - (obj.t * 0.99));
@@ -293,7 +286,6 @@ function openBox() {
 
 function cartMovingOut() {
     currentState = States.CART_OUT;
-    
     new TWEEN.Tween(cartGroup.position)
         .to({ x: cartEmpties.out.position.x, y: cartEmpties.out.position.y, z: cartEmpties.out.position.z }, 1500)
         .easing(TWEEN.Easing.Quadratic.Out)
@@ -305,9 +297,8 @@ function cartMovingOut() {
 
 function boxGone() {
     currentState = States.BOX_GONE;
-    // Move further down and slower before hiding
     new TWEEN.Tween(boxMesh.position)
-        .to({ y: -3.0 }, 2000)
+        .to({ y: -25.0 }, 3000)
         .easing(TWEEN.Easing.Quadratic.In)
         .onComplete(() => {
             boxMesh.visible = false;
@@ -319,9 +310,9 @@ function boxGone() {
 function gameboyAppearing() {
     currentState = States.GB_APPEARING;
     gbMesh.visible = true;
-    gbMesh.position.y = -3.0; // Appear from further down
+    gbMesh.position.y = -25.0;
     new TWEEN.Tween(gbMesh.position)
-        .to({ y: 0 }, 1500)
+        .to({ y: 0 }, 2000)
         .easing(TWEEN.Easing.Back.Out)
         .onComplete(() => {
             currentState = States.GB_READY;
@@ -334,7 +325,6 @@ function insertCart() {
     currentState = States.CART_INSERTING;
     hideToast();
 
-    // Fix rotation "shrink" by using proper Slerp instead of tweening quat components directly
     const startPos = cartGroup.position.clone();
     const startQuat = cartGroup.quaternion.clone();
     
@@ -346,7 +336,6 @@ function insertCart() {
             cartGroup.quaternion.slerpQuaternions(startQuat, cartEmpties.flipped.quaternion, obj.t);
         })
         .onComplete(() => {
-            // Slide into GameBoy
             new TWEEN.Tween(cartGroup.position)
                 .to({ x: cartEmpties.inserted.position.x, y: cartEmpties.inserted.position.y, z: cartEmpties.inserted.position.z }, 800)
                 .easing(TWEEN.Easing.Quadratic.In)
@@ -377,7 +366,6 @@ async function startEmulator() {
     $("#emulator-controls").style.display = "block";
     $("#controls-panel").style.width = "220px";
 
-    // Fix screen covering: resize canvas to match GameBoy screen resolution
     const canvas = $("#mainCanvas");
     canvas.width = 160;
     canvas.height = 144;
@@ -390,17 +378,14 @@ async function startEmulator() {
     Emulator.start(await binjgbPromise, romBuffer, extRam);
     emulator.setBuiltinPalette(83);
 
-    // Apply texture to screen mesh
     gbMesh.traverse((child) => {
         if (child.isMesh && child.name === "GB_02_low_Screen__0") {
             screenTexture = new THREE.CanvasTexture(canvas);
             screenTexture.flipY = false;
             screenTexture.minFilter = THREE.NearestFilter;
             screenTexture.magFilter = THREE.NearestFilter;
-            // Ensure full coverage and correct wrapping
             screenTexture.wrapS = THREE.ClampToEdgeWrapping;
             screenTexture.wrapT = THREE.ClampToEdgeWrapping;
-            
             child.material = new THREE.MeshBasicMaterial({ map: screenTexture });
         }
     });
@@ -408,33 +393,21 @@ async function startEmulator() {
     currentState = States.PLAYING;
 }
 
-// --- Main Loop ---
-
 function animate() {
     requestAnimationFrame(animate);
     TWEEN.update();
     controls.update();
-    
-    if (currentState === States.PLAYING && screenTexture) {
-        screenTexture.needsUpdate = true;
-    }
-    
+    if (currentState === States.PLAYING && screenTexture) screenTexture.needsUpdate = true;
     renderer.render(scene, camera);
 }
-
-// --- Start ---
 
 (async function main() {
     initThree();
     await loadAssets();
     animate();
-    
     currentState = States.BAG_CLOSED;
-    showToast("Click the bag to open", 2000);
+    showToast("Click the bag to open", 2500);
 })();
-
-
-// --- Emulator Bridge Classes (Restored from previous script.js) ---
 
 class VM {
     constructor() {
@@ -442,10 +415,7 @@ class VM {
         this.volume = 0.5;
         this.palIdx = 83;
         setInterval(() => {
-            if (this.extRamUpdated) {
-                this.updateExtRam();
-                this.extRamUpdated = false;
-            }
+            if (this.extRamUpdated) { this.updateExtRam(); this.extRamUpdated = false; }
         }, 1000);
     }
     updateExtRam() {
@@ -512,10 +482,7 @@ class Emulator {
     runUntil(ticks) {
         while (true) {
             const event = this.module._emulator_run_until_f64(this.e, ticks);
-            if (event & EVENT_NEW_FRAME) {
-                this.rewind.pushBuffer();
-                this.video.uploadTexture();
-            }
+            if (event & EVENT_NEW_FRAME) { this.rewind.pushBuffer(); this.video.uploadTexture(); }
             if (event & EVENT_AUDIO_BUFFER_FULL) this.audio.pushBuffer();
             if (event & EVENT_UNTIL_TICKS) break;
         }
@@ -535,23 +502,21 @@ class Emulator {
     }
     bindKeys() {
         this.keyFuncs = {};
-        customControls.down.forEach(k => this.keyFuncs[k.toLowerCase()] = (s) => this.module._set_joyp_down(this.e, s));
-        customControls.up.forEach(k => this.keyFuncs[k.toLowerCase()] = (s) => this.module._set_joyp_up(this.e, s));
-        customControls.left.forEach(k => this.keyFuncs[k.toLowerCase()] = (s) => this.module._set_joyp_left(this.e, s));
-        customControls.right.forEach(k => this.keyFuncs[k.toLowerCase()] = (s) => this.module._set_joyp_right(this.e, s));
-        customControls.a.forEach(k => this.keyFuncs[k.toLowerCase()] = (s) => this.module._set_joyp_A(this.e, s));
-        customControls.b.forEach(k => this.keyFuncs[k.toLowerCase()] = (s) => this.module._set_joyp_B(this.e, s));
-        customControls.start.forEach(k => this.keyFuncs[k.toLowerCase()] = (s) => this.module._set_joyp_start(this.e, s));
-        customControls.select.forEach(k => this.keyFuncs[k.toLowerCase()] = (s) => this.module._set_joyp_select(this.e, s));
+        const updateMorph = (morph, val) => { if (currentState === States.PLAYING) setMorphValue(gbMesh, morph, val); };
+        customControls.down.forEach(k => { this.keyFuncs[k.toLowerCase()] = (s) => { this.module._set_joyp_down(this.e, s); updateMorph('Down', s ? 1.0 : 0.0); }; });
+        customControls.up.forEach(k => { this.keyFuncs[k.toLowerCase()] = (s) => { this.module._set_joyp_up(this.e, s); updateMorph('Up', s ? 1.0 : 0.0); }; });
+        customControls.left.forEach(k => { this.keyFuncs[k.toLowerCase()] = (s) => { this.module._set_joyp_left(this.e, s); updateMorph('Left', s ? 1.0 : 0.0); }; });
+        customControls.right.forEach(k => { this.keyFuncs[k.toLowerCase()] = (s) => { this.module._set_joyp_right(this.e, s); updateMorph('Right', s ? 1.0 : 0.0); }; });
+        customControls.a.forEach(k => { this.keyFuncs[k.toLowerCase()] = (s) => { this.module._set_joyp_A(this.e, s); updateMorph('A', s ? 1.0 : 0.0); }; });
+        customControls.b.forEach(k => { this.keyFuncs[k.toLowerCase()] = (s) => { this.module._set_joyp_B(this.e, s); updateMorph('B', s ? 1.0 : 0.0); }; });
+        customControls.start.forEach(k => { this.keyFuncs[k.toLowerCase()] = (s) => { this.module._set_joyp_start(this.e, s); updateMorph('Start', s ? 1.0 : 0.0); }; });
+        customControls.select.forEach(k => { this.keyFuncs[k.toLowerCase()] = (s) => { this.module._set_joyp_select(this.e, s); updateMorph('Select', s ? 1.0 : 0.0); }; });
         this.onKD = (e) => { if (this.keyFuncs[e.key.toLowerCase()]) { this.keyFuncs[e.key.toLowerCase()](true); e.preventDefault(); } };
         this.onKU = (e) => { if (this.keyFuncs[e.key.toLowerCase()]) { this.keyFuncs[e.key.toLowerCase()](false); e.preventDefault(); } };
         window.addEventListener("keydown", this.onKD);
         window.addEventListener("keyup", this.onKU);
     }
-    unbindKeys() {
-        window.removeEventListener("keydown", this.onKD);
-        window.removeEventListener("keyup", this.onKU);
-    }
+    unbindKeys() { window.removeEventListener("keydown", this.onKD); window.removeEventListener("keyup", this.onKU); }
 }
 
 class Gamepad {
