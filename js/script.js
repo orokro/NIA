@@ -438,11 +438,24 @@ function animate() {
 
 (async function main() {
     initThree();
+    setupCredits();
     await loadAssets();
     animate();
     currentState = States.BAG_CLOSED;
-    showToast("Click the bag to open", 2500);
+    showToast("Click the top of the bag to open", 2500);
 })();
+
+function setupCredits() {
+    const btn = $('#credits-btn');
+    const modal = $('#credits-modal');
+    const closeBtn = $('.close-modal');
+
+    btn.onclick = () => modal.style.display = "block";
+    closeBtn.onclick = () => modal.style.display = "none";
+    window.onclick = (event) => {
+        if (event.target == modal) modal.style.display = "none";
+    };
+}
 
 class VM {
     constructor() {
