@@ -385,6 +385,7 @@ function togglePower() {
 async function startEmulator() {
     $("#emulator-controls").style.display = "block";
     $("#controls-panel").style.width = "220px";
+    $("#download-btn").style.display = "flex";
 
     const canvas = $("#mainCanvas");
     canvas.width = 160;
