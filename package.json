@@ -4,6 +4,7 @@
   "description": "Fork of binji's Game Boy emulator built as a WebAssembly module.",
   "main": "binjgb.js",
   "scripts": {
+    "start": "npx serve .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
