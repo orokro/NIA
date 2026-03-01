@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+      body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; }
+      #three-container { width: 100vw; height: 100vh; }
+      
+      /* Loading Screen */
+      #loading-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: #000; display: flex; flex-direction: column;
+        justify-content: center; align-items: center; z-index: 1000;
+        transition: opacity 0.5s ease;
+      }
+      #loading-bar-container {
+        width: 200px; height: 10px; background: #333; border-radius: 5px; margin-top: 20px;
+      }
+      #loading-bar {
+        width: 0%; height: 100%; background: #00ff00; border-radius: 5px;
+        transition: width 0.1s;
+      }
+      #loading-text { color: #fff; font-size: 14px; margin-top: 10px; }
+
+      /* Toasts */
+      #toast-container {
+        position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+        z-index: 500; pointer-events: none;
+      }
+      .toast {
+        background: rgba(0, 0, 0, 0.8); color: #fff; padding: 12px 24px;
+        border-radius: 30px; border: 1px solid #444; margin-bottom: 10px;
+        opacity: 0; transform: translateY(-20px); transition: all 0.3s ease;
+      }
+      .toast.show { opacity: 1; transform: translateY(0); }
+
+      /* Controls Panel */
+      #controls-panel {
+        position: fixed; bottom: 20px; right: 20px;
+        background: rgba(0, 0, 0, 0.6); color: #fff; padding: 15px;
+        border-radius: 8px; backdrop-filter: blur(5px);
+        font-size: 12px; border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: all 0.5s ease; width: 180px;
+      }
+      #controls-panel h4 { margin: 0 0 8px 0; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+      #controls-panel ul { margin: 0; padding: 0; list-style: none; }
+      #controls-panel li { margin-bottom: 4px; display: flex; justify-content: space-between; }
+      #controls-panel .key { color: #00ff00; font-weight: bold; }
+      #emulator-controls { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #444; }
+
+      #game { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="loading-overlay">
+      <div id="loading-text">Loading Experience...</div>
+      <div id="loading-bar-container">
+        <div id="loading-bar"></div>
+      </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <div id="controls-panel">
+      <h4>Navigation</h4>
+      <ul>
+        <li><span>Rotate</span> <span class="key">LMB</span></li>
+        <li><span>Zoom</span> <span class="key">Scroll</span></li>
+        <li><span>Pan</span> <span class="key">RMB</span></li>
+      </ul>
+      <div id="emulator-controls">
+        <h4>Game Controls</h4>
+        <ul>
+          <li><span>D-Pad</span> <span class="key">WASD / Arrows</span></li>
+          <li><span>A</span> <span class="key">J / Z / Alt</span></li>
+          <li><span>B</span> <span class="key">K / X / Ctrl</span></li>
+          <li><span>Start</span> <span class="key">Enter</span></li>
+          <li><span>Select</span> <span class="key">Shift</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="three-container"></div>
+    
+    <div id="game">
+      <canvas id="mainCanvas" width="256" height="224">No Canvas Support</canvas>
+    </div>
+
+    <script>
+      const customControls = {"up":["ArrowUp","w"],"down":["ArrowDown","s"],"left":["ArrowLeft","a"],"right":["ArrowRight","d"],"a":["Alt","z","j"],"b":["Control","k","x"],"start":["Enter"],"select":["Shift"]}
+    </script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+          "@tweenjs/tween.js": "https://unpkg.com/@tweenjs/tween.js@23.1.1/dist/tween.esm.js"
+        }
+      }
+    </script>
+    <script src="binjgb.js"></script>
+    <script src="js/script.js" type="module"></script>
+</body>
+</html>

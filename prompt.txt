@@ -1,0 +1,181 @@
+Alright we're building a 3D demo of an unbagging, unboxing, and playing of a virtual gameboy game, using ThreeJS, and whatever other technology you want.
+
+In the 3d/ folder, I've put a new model called scene.glb, and this scene will contain all the items we need for the experience.
+
+Read the full prompt before proceeding, but here's the rough outline of the experience:
+
+- User loads page, they see a paper bag (called "FLBag" in the scene). There is an orbit camera and the lighting is set up (basically what already exists in the project).
+- After a short timer, a toast notification pops up on top of the page that says "Click the bag to open"
+- The ThreeJS scene does a raycast when clicked & if the user hit the back, it does some morph-target animation to open
+- After the morph-target animation is complete, the bag moves down a meter or so and then is hidden (after moving).
+- Inside the back (present from the start of the scene) is a model called GameBox in the scene. The user is free to examine it, but after another short timer, is prompted with a toast that says to click the top of the box to open
+- When the user clicks the top of the box (again, handled via raycasting), it does some morph target animation to open the box.
+- Once the morph target animation is complete, the game cartridge (called Cart in the scene) moves up out of the box
+- Then the box flies downward a meter or so, and is hidden after moving
+- After a couple seconds, a gameboy machine (called GameBoy in the scene), appears a meter below and slides up to 0,0,0
+- After its done moving, after a couple seconds, another toast informs the user to click the cartridge to insert
+- Once they do, the cartridge flips around, and slides into the gameboy
+- Then a last toast informs the user to click the power button on the gameboy. Doing so, does a morph target animation on the GameBoy to show the switch sliding on, and then the emulator is loaded & applied to the 3d model as we're already doing.
+
+Now, to make you're life easier, I've added some useful stuff in the scene, and I'll explain the detailed behavior below.
+
+First, here's the scene you'll find inside the GLB, note that [M] denotes a mesh, and [G] denotes as group. In some cased I've used Groups as empties to use as logical targets. Below, anything between quotes is the actual Object3D name, etc.
+
+scene.glb
+└── [G] "Scene"
+    ├── [M] "FLBag"
+    ├── [M] "GameBox"
+    │   ├── [M] "Cartridge_Holder"
+    │   └── [M] "Collider_BoxTop"
+    ├── [M] "GameBoy"
+    │   ├── [M] "Collider_PowerButton"
+    │   ├── [M] "GB_02_low_Screen__0"
+    │   └── [M] "LED"
+    ├── [G] "Cart"
+    │   ├── [M] "Circle001"
+    │   ├── [M] "Circle001_1"
+    │   ├── [M] "Circle001_2"
+    │   ├── [M] "Circle001_3"
+    │   └── [M] "Circle001_4"
+    ├── [G] "GB_Catridge_Start"
+    ├── [G] "GB_Catridge_Out"
+    ├── [G] "GB_Catridge_Flipped"
+    └── [G] "GB_Catridge_Inserted"
+
+
+The first thing to notice is Collider_BoxTop and Collider_PowerButton. These are rectangular prisms I added to the scene as the area the raycaster should look for. They should be hidden upon load (I.e. not actually visible), but they're size/space is correct for the click targets. So, you'll probably need to add a Box3D or so that is present in the scene and can receive raycast hits, but is actually invisible. Just use these two Collider objects as reference for the area. They should be square to the scenes units.
+
+Next, lets talk about the morph target animation. In Blender, these are called blend-shapes or shape-keys, and I may refer to them as either, but they're essentially the same thing. Further, I think ThreeJS uses a scale of 0-to-100, but I'll be using normalized 0.0 to 1.0 when describing behavior.
+
+OPENING THE BAG:
+----------------
+
+First, the opening of the FLBag object. It has three shape keys on it:
+	Top_Bent
+	Top_Opening
+	Top_Open
+
+When the scene initially loads, Top_Bent should be set to 1.0, and the other two, should be at 0.0. This gives the illusion that the top of the bag is folded over.
+
+When the bag opens, we need a few lerp-steps.
+
+First, during the same time:
+- Top_Bent goes from 1.0 to 0.0
+- Top_Opening goes from 0.0 to 1.0 and back to 0.0, on a smooth curve. This is subtle: Top_Opening should be at 1.0 when the animation is 50% over, and return to 0.0 when its 100% over.
+
+These two will cause the top of the bag to unfurl slowly without too much distortion. Top_Bent can be linear, but Top_Opening should follow sin from 0 to 180, so that when its 50% over (i.e. 90) its at 1.0.
+
+Then after the first wave of morph target animation is complete, it should lerp Top_Open from 0.0 to 1.0, very simple.
+
+
+
+
+OPENING THE BOX:
+----------------
+
+The GameBox provides the following Morph Target / shape keys:
+	Open_1
+	Open_2
+	Open_3
+	Flaps_Open
+
+All of these should start at 0.0.
+
+Again, we'll have two waves (runs).
+
+First, Open_1 will go from 0.0 to 1.0, and Open_2 will follow the same sin 0 to 180 pattern as Top_Opening did in the previous explanation. 
+
+The second wave is easier - both Open3_3 and Flaps_Open will simply go from 0.0 to 1.0.
+
+
+POWERING ON THE GAMEBOY:
+------------------------
+
+The GameBoy provides multiple morph targets, but we'll discuss those in another prompt, except for:
+	On
+
+When the Collider_PowerButton is clicked during that step of the state machine, then the GameBoys "On" Shape-Key should go from 0.0 to 1.0.
+
+In addition, you'll also find:
+scene.glb
+└── [G] "Scene"
+    ├── [M] "GameBoy"
+        └── [M] "LED"
+
+This "LED" should be hidden when the scene loads, but after the morph target for the On is complete, this LED should be shown, giving the impression that the system is powered up.
+
+
+MOVING THE CARTRIDGE:
+---------------------
+
+Next, let's talk about the animation moving the cartridge.
+
+In the scene, I've provided 4 empties:
+	GB_Catridge_Start
+	GB_Catridge_Out
+	GB_Catridge_Flipped
+	GB_Catridge_Inserted
+
+The First two, have no rotation, and the last 2 have been rotated 180 on one axis.
+
+When the cartridge is removed from the box, it should start at the world rotation of GB_Catridge_Start, and lerp over to GB_Catridge_Out.
+
+Then, when clicked to insert into the gameboy, it should lerp both position and rotation from GB_Catridge_Out to GB_Catridge_Flipped. Note that, GB_Catridge_Flipped is the first empty to have the 180 rotation on it, so this should flip the cartridge.
+
+Then, after the cartridge is flipped (without further input from the user), it should slide into the game machine. This is accomplished from lerping it from GB_Catridge_Flipped to GB_Catridge_Inserted, which should put it in the correct place.
+
+
+A couple other notes on the scene:
+
+When the scene starts:
+- GameBoy (which is normaly at 0,0,0) should be moved down a meter, and hidden
+- The LED should be hidden
+- The Collider_BoxTop and Collider_PowerButton reference boxes should be used for click-collider info & hidden
+- Everything else - FLBag, Cart, GameBox, etc can be present, because they're all inside each other.
+
+When the Bag is finished opening:
+- It flies down a meter or so, & hides
+
+When the box is finished opening (after the cartridge has reached it's GB_Catridge_Out position), the box can fly down & hide.
+
+Then, only after the box is gone, the GameBoy can reappear from it's hiding spot below & slide up to 0,0,0, where it should be aligned correctly to receive the cartridge.
+
+---
+
+Notes on the emulator: as you can se the project currently has a proof of concept wiring the web-based / canvas-based emulator up to a screen. The name of the screen object is still GB_02_low_Screen__0.
+
+The difference, is now we want to delay the initialization of the emulator and the screen texture process UNTIL the user gets to the power on step.
+
+---
+
+
+Therefore, we should probably have some kind of state machine to handle the various states. The toasts should not disappear until the state they're for changes. So, if the toast asking the user to click-to-open the box shows up, it should remain up until the user does so, and then quickly disappear.
+
+Toasts should not start immediately with state - they should be a bit delayed so the user can enjoy the 3d model a bit before being called to proceed.
+
+---
+
+UI:
+
+On the bottom right there should be a floating transparent panel, pretty conservatively sized, that says by default the ThreeJS orbit controls, (i.e. left click rotate, etc etc).
+
+Only after the emulator is started, this panel should grow a bit to include the emulators hotkeys, this way we don't reveal the surprise too early.
+
+---
+
+It would also be nice to have an async loading bar when the webpage first loads, since the scene.glb is somewhat heavy.
+
+---
+
+I have done an npm init already, and it's already using ThreeJS, but if you want (or need to), convert it to a react and/or vue3 project with vanillaJS. Not required, but if you use libraries that need building, make sure to add a build step to package.json so I can deliver it in a built state
+
+
+
+
+
+
+
+
+
+
+
